@@ -1,0 +1,52 @@
+# Build Artifacts
+build/
+bin/
+Release/
+Debug/
+x64/
+*.dir/
+*.vcxproj*
+*.sln
+*.user
+
+# Binaries and Compiled Libraries
+*.exe
+*.dll
+*.lib
+*.pdb
+*.ilk
+*.exp
+*.obj
+*.o
+*.a
+*.so
+*.dylib
+
+# Heavy Neural Model Files (Hosted on Hugging Face: Singla0009/Hindi-to-Hinglish-Pro)
+*.gguf
+*.onnx
+*.bin
+*.safetensors
+*.pt
+*.pth
+
+# Test Logs and Temporary Output Dumps
+*.log
+matrix_batch_*.txt
+retest_*.txt
+test_in.txt
+deep_test_batch_*.txt
+*.json
+!package.json
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Legacy Archives
+legacy_archive/
+.vs/
+.vscode/
+.idea/
