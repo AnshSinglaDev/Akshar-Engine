@@ -60,74 +60,114 @@ public:
     }
 };
 
+static fs::path get_executable_directory() {
+#if defined(_WIN32)
+    wchar_t path[MAX_PATH];
+    DWORD len = GetModuleFileNameW(NULL, path, MAX_PATH);
+    if (len > 0 && len < MAX_PATH) {
+        return fs::path(path).parent_path();
+    }
+#endif
+    return fs::current_path();
+}
+
 static std::string resolve_gguf_path(const std::string& user_path) {
     if (!user_path.empty() && fs::exists(user_path) && !fs::is_directory(user_path)) {
         return user_path;
     }
-    const char* env_path = std::getenv("BYT5_GGUF_MODEL");
+    const char* env_path = std::getenv("AKSHAR_MODEL_PATH");
+    if (!env_path) env_path = std::getenv("BYT5_GGUF_MODEL");
     if (env_path && fs::exists(env_path) && !fs::is_directory(env_path)) {
         return env_path;
     }
-    const std::vector<std::string> candidates = {
-        "hindi-to-hinglish-pro.q8_0.gguf",
-        "models/hindi-to-hinglish-pro.q8_0.gguf",
-        "../models/hindi-to-hinglish-pro.q8_0.gguf",
-        "../../models/hindi-to-hinglish-pro.q8_0.gguf",
-        "../../../models/hindi-to-hinglish-pro.q8_0.gguf",
-        "byt5_v3_120k_q8_0.gguf",
-        "models/byt5_v3_120k_q8_0.gguf",
-        "../models/byt5_v3_120k_q8_0.gguf",
-        "../../models/byt5_v3_120k_q8_0.gguf",
-        "../../../models/byt5_v3_120k_q8_0.gguf",
-        "hinglish_research/byt5_v3_120k_q8_0.gguf",
-        "../hinglish_research/byt5_v3_120k_q8_0.gguf",
-        "../../hinglish_research/byt5_v3_120k_q8_0.gguf",
-        "../../../hinglish_research/byt5_v3_120k_q8_0.gguf",
-        "../../../../hinglish_research/byt5_v3_120k_q8_0.gguf",
-        "hinglish_research/byt5_v3_120k.gguf",
-        "../hinglish_research/byt5_v3_120k.gguf",
-        "../../hinglish_research/byt5_v3_120k.gguf",
-        "../../../hinglish_research/byt5_v3_120k.gguf",
-        "../../../../hinglish_research/byt5_v3_120k.gguf"
+
+    fs::path exe_dir = get_executable_directory();
+    fs::path cwd = fs::current_path();
+
+    const std::vector<fs::path> candidates = {
+        exe_dir / "hindi-to-hinglish-pro.q8_0.gguf",
+        exe_dir / "models" / "hindi-to-hinglish-pro.q8_0.gguf",
+        cwd / "hindi-to-hinglish-pro.q8_0.gguf",
+        cwd / "models" / "hindi-to-hinglish-pro.q8_0.gguf",
+        exe_dir / "byt5_v3_120k_q8_0.gguf",
+        cwd / "byt5_v3_120k_q8_0.gguf"
     };
+
     for (const auto& c : candidates) {
-        if (!c.empty() && fs::exists(c) && !fs::is_directory(c)) {
-            return c;
+        if (fs::exists(c) && !fs::is_directory(c)) {
+            return c.string();
         }
     }
-    return user_path;
+    return "";
 }
 
 static std::string resolve_onnx_dir(const std::string& user_path) {
     if (!user_path.empty() && fs::exists(user_path) && fs::is_directory(user_path)) {
         return user_path;
     }
-    const char* env_dir = std::getenv("BYT5_ONNX_DIR");
+    const char* env_dir = std::getenv("AKSHAR_ONNX_DIR");
+    if (!env_dir) env_dir = std::getenv("BYT5_ONNX_DIR");
     if (env_dir && fs::exists(env_dir) && fs::is_directory(env_dir)) {
         return env_dir;
     }
-    const std::vector<std::string> candidates = {
-        "onnx",
-        "models/onnx",
-        "../models/onnx",
-        "../../models/onnx",
-        "byt5_onnx_q8",
-        "models/byt5_onnx_q8",
-        "../models/byt5_onnx_q8",
-        "../../models/byt5_onnx_q8",
-        "../../../models/byt5_onnx_q8",
-        "hinglish_research/byt5_onnx_q8",
-        "../hinglish_research/byt5_onnx_q8",
-        "../../hinglish_research/byt5_onnx_q8",
-        "../../../hinglish_research/byt5_onnx_q8",
-        "../../../../hinglish_research/byt5_onnx_q8"
+
+    fs::path exe_dir = get_executable_directory();
+    fs::path cwd = fs::current_path();
+
+    const std::vector<fs::path> candidates = {
+        exe_dir / "onnx",
+        exe_dir / "models" / "onnx",
+        cwd / "onnx",
+        cwd / "models" / "onnx",
+        exe_dir / "byt5_onnx_q8",
+        cwd / "byt5_onnx_q8"
     };
+
     for (const auto& c : candidates) {
-        if (!c.empty() && fs::exists(c) && fs::is_directory(c)) {
-            return c;
+        if (fs::exists(c) && fs::is_directory(c)) {
+            return c.string();
         }
     }
-    return user_path;
+    return "";
+}
+
+static bool download_gguf_model(const fs::path& target_file) {
+    const std::string url = "https://huggingface.co/Singla0009/Hindi-to-Hinglish-Pro/resolve/main/gguf/hindi-to-hinglish-pro.q8_0.gguf";
+
+    std::cout << "\n------------------------------------------------------------------------\n"
+              << "  DOWNLOADING OFFICIAL AI MODEL FROM HUGGING FACE\n"
+              << "------------------------------------------------------------------------\n"
+              << "  Model  : hindi-to-hinglish-pro.q8_0.gguf (~303 MB)\n"
+              << "  Source : " << url << "\n"
+              << "  Save to: " << target_file.string() << "\n"
+              << "------------------------------------------------------------------------\n\n";
+
+    // Attempt download using native Windows curl.exe with live progress bar
+    std::string cmd = "curl.exe -L --progress-bar -o \"" + target_file.string() + "\" \"" + url + "\"";
+    int ret = std::system(cmd.c_str());
+
+    if (ret == 0 && fs::exists(target_file) && fs::file_size(target_file) > 100 * 1024 * 1024) {
+        std::cout << "\n[OK] Model successfully downloaded (" << (fs::file_size(target_file) / (1024 * 1024)) << " MB)!\n"
+                  << "Saved to: " << target_file.string() << "\n\n";
+        return true;
+    }
+
+    // Fallback via PowerShell Invoke-WebRequest if curl.exe is missing
+    std::cout << "\n[Notice] Standard downloader failed. Retrying via PowerShell WebClient...\n";
+    std::string ps_cmd = "powershell -Command \"[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('" + url + "', '" + target_file.string() + "')\"";
+    ret = std::system(ps_cmd.c_str());
+
+    if (ret == 0 && fs::exists(target_file) && fs::file_size(target_file) > 100 * 1024 * 1024) {
+        std::cout << "\n[OK] Fallback download completed successfully (" << (fs::file_size(target_file) / (1024 * 1024)) << " MB)!\n\n";
+        return true;
+    }
+
+    std::cerr << "\n[Error] Download failed or file was incomplete. Please check your internet connection.\n";
+    if (fs::exists(target_file)) {
+        std::error_code ec;
+        fs::remove(target_file, ec);
+    }
+    return false;
 }
 
 int main(int argc, char* argv[]) {
@@ -135,6 +175,7 @@ int main(int argc, char* argv[]) {
     SetConsoleCP(CP_UTF8);
     SetConsoleOutputCP(CP_UTF8);
     std::setlocale(LC_ALL, ".UTF-8");
+    SetConsoleTitleW(L"AKSHAR ENGINE (अक्षर) — Hindi to Hinglish Neural Runtime");
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
     if (hOut != INVALID_HANDLE_VALUE) {
         DWORD dwMode = 0;
@@ -170,20 +211,19 @@ int main(int argc, char* argv[]) {
         } else if ((arg == "--output-file" || arg == "-o") && i + 1 < argc) {
             batch_output_file = argv[++i];
         } else if (arg == "--help" || arg == "-h") {
-            std::cout << "\033[1;36m"
-                      << "================================================================================\n"
-                      << "           HINDI TO HINGLISH NEURAL TRANSLATION RUNTIME\n"
-                      << "           Akshar Engine (अक्षर) — ByT5 Vulkan GPU & AVX2 SIMD\n"
-                      << "================================================================================\033[0m\n\n"
-                      << "\033[1;33mUsage:\033[0m akshar_engine [options] [model_path]\n\n"
+            std::cout << "\n========================================================================\n"
+                      << "  AKSHAR ENGINE (अक्षर) — HINDI TO HINGLISH NEURAL RUNTIME\n"
+                      << "  Sub-15ms Real-Time Inference • Pure Vulkan GPU & CPU SIMD\n"
+                      << "========================================================================\n\n"
+                      << "Usage: akshar_engine [options] [model_path]\n\n"
                       << "Options:\n"
-                      << "  -d, --device <backend>   Target backend: 'auto', 'vulkan' (GPU), 'onnx' (CPU), 'dml' (DirectML)\n"
+                      << "  -d, --device <backend>   Target backend: 'auto', 'vulkan' (GPU), 'onnx' (CPU)\n"
                       << "  -m, --model <path>       Model path (.gguf file for Vulkan, directory for ONNX)\n"
                       << "  -j, --threads <int>      CPU compute threads (default: hardware concurrency)\n"
                       << "  -p, --parallel <int>     GPU parallel compute slots for Vulkan (default: 4)\n"
                       << "  -t, --max-tokens <int>   Maximum generation tokens (default: 256)\n"
                       << "  -b, --batch-file <file>  Batch process lines from a file\n"
-                      << "  -o, --output-file <file> Output file destination for batch results (default: stdout)\n"
+                      << "  -o, --output-file <file> Output destination for batch results (default: stdout)\n"
                       << "  -h, --help               Show this help message\n";
             return 0;
         } else if (arg[0] != '-') {
@@ -193,14 +233,17 @@ int main(int argc, char* argv[]) {
 
     bool interactive_gui_mode = (argc == 1);
     if (interactive_gui_mode) {
-        std::cout << "\n\033[1;36m"
-                  << " ╔═══════════════════════════════════════════════════════════════════════════╗\n"
-                  << " ║\033[1;37m                 HINDI TO HINGLISH NEURAL TRANSLATION                      \033[1;36m║\n"
-                  << " ║\033[1;33m              Akshar Engine (अक्षर) • Ultra-Fast ByT5 Runtime              \033[1;36m║\n"
-                  << " ║                                                                           ║\n"
-                  << " ║\033[0m   ⚡ \033[1;32mPure Vulkan GPU & AVX2 SIMD\033[0m      ⏱️  \033[1;32mSub-15ms Real-Time Latency\033[0m     \033[1;36m║\n"
-                  << " ║\033[0m   📦 \033[90mModel: Singla0009/Hindi-to-Hinglish-Pro\033[0m • \033[33mCC-BY-NC 4.0 Non-Commercial\033[0m \033[1;36m║\n"
-                  << " ╚═══════════════════════════════════════════════════════════════════════════╝\033[0m\n\n";
+        std::cout << "\033[1;36m"
+                  << "    _    _  ______ _   _    _    ____   \n"
+                  << "   / \\  | |/ / ___| | | |  / \\  |  _ \\  \n"
+                  << "  / _ \\ | ' /\\___ \\| |_| |/ _ \\ | |_) | \n"
+                  << " / ___ \\| . \\ ___) |  _  / ___ \\|  _ <  \n"
+                  << "/_/   \\_\\_|\\_\\____/|_| |_/_/   \\_\\_| \\_\\ \n"
+                  << "\033[0m"
+                  << "========================================================================\n"
+                  << "\033[1m  AKSHAR ENGINE (अक्षर) — Hindi to Hinglish Neural Runtime\033[0m\n"
+                  << "  Sub-15ms Real-Time Inference • Pure Vulkan GPU & CPU SIMD\n"
+                  << "========================================================================\n\n";
     }
 
     // Determine backend
@@ -213,33 +256,50 @@ int main(int argc, char* argv[]) {
 
     if (selected_backend == "ggml-cpu" || selected_backend == "vulkan-cpu" || selected_backend == "v2-cpu" || selected_backend == "ggml") {
         use_ggml_cpu = true;
-    } else if (selected_backend == "onnx" || selected_backend == "cpu" || selected_backend == "ort" || selected_backend == "dml") {
+    } else if (selected_backend == "onnx" || selected_backend == "cpu" || selected_backend == "ort") {
         use_onnx = true;
     } else if (selected_backend == "vulkan" || selected_backend == "vk" || selected_backend == "gpu") {
         use_vulkan = true;
     } else if (selected_backend == "auto") {
-        // Auto: If user explicitly passed an ONNX directory or if .gguf doesn't exist, try ONNX; otherwise try Vulkan
         if (!user_model_path.empty() && fs::is_directory(user_model_path)) {
             use_onnx = true;
         } else {
             std::string candidate_gguf = resolve_gguf_path(user_model_path);
-            if (fs::exists(candidate_gguf) && !fs::is_directory(candidate_gguf)) {
+            if (!candidate_gguf.empty()) {
+                user_model_path = candidate_gguf;
                 use_vulkan = true;
             } else {
                 std::string candidate_onnx = resolve_onnx_dir(user_model_path);
-                if (fs::exists(candidate_onnx) && fs::is_directory(candidate_onnx)) {
+                if (!candidate_onnx.empty()) {
+                    user_model_path = candidate_onnx;
                     use_onnx = true;
                 } else if (interactive_gui_mode) {
-                    // Friendly drag & drop model prompt for double-clickers
-                    std::cout << "\033[1;33m ╭─ [ Model Setup ] ─────────────────────────────────────────────────────────╮\n"
-                              << " │  📂 Drag & Drop your 'hindi-to-hinglish-pro.q8_0.gguf' here & press ENTER  │\n"
-                              << " │  🌐 Free Weights: huggingface.co/Singla0009/Hindi-to-Hinglish-Pro         │\n"
-                              << " ╰───────────────────────────────────────────────────────────────────────────╯\033[0m\n"
-                              << " \033[1;36mModel File Path ❯\033[0m " << std::flush;
-                    std::string input_path;
-                    if (std::getline(std::cin, input_path)) {
-                        byt5::TextUtils::trim(input_path);
-                        if (!input_path.empty()) {
+                    fs::path app_dir = get_executable_directory();
+                    std::cout << "------------------------------------------------------------------------\n"
+                              << "  MODEL SETUP: Hindi-to-Hinglish Model Not Found\n"
+                              << "------------------------------------------------------------------------\n"
+                              << "  Target folder: " << app_dir.string() << "\n\n"
+                              << "  [1] Download official model from Hugging Face (~303 MB) [RECOMMENDED]\n"
+                              << "  [2] Drag & Drop an existing .gguf file into this window\n"
+                              << "  [3] Exit\n"
+                              << "------------------------------------------------------------------------\n"
+                              << "  Select option [Press ENTER for 1] > " << std::flush;
+
+                    std::string choice;
+                    std::getline(std::cin, choice);
+                    byt5::TextUtils::trim(choice);
+
+                    if (choice.empty() || choice == "1") {
+                        fs::path dest_file = app_dir / "hindi-to-hinglish-pro.q8_0.gguf";
+                        if (download_gguf_model(dest_file)) {
+                            user_model_path = dest_file.string();
+                            use_vulkan = true;
+                        }
+                    } else if (choice == "2") {
+                        std::cout << "\n  Drag & drop your .gguf file here and press ENTER > " << std::flush;
+                        std::string input_path;
+                        if (std::getline(std::cin, input_path)) {
+                            byt5::TextUtils::trim(input_path);
                             if (input_path.size() >= 2 && input_path.front() == '"' && input_path.back() == '"') {
                                 input_path = input_path.substr(1, input_path.size() - 2);
                             }
@@ -249,19 +309,18 @@ int main(int argc, char* argv[]) {
                                 else use_vulkan = true;
                             }
                         }
+                    } else {
+                        return 0;
                     }
                 }
 
-                // If still not found after interactive prompt
                 if (!use_vulkan && !use_onnx) {
-                    std::cout << "\n\033[1;31m❌ Hindi to Hinglish model not found!\033[0m\n\n"
-                              << "📥 \033[1;37mDownload official weights from Hugging Face:\033[0m\n"
-                              << "   \033[1;36mhuggingface-cli download Singla0009/Hindi-to-Hinglish-Pro gguf/hindi-to-hinglish-pro.q8_0.gguf --local-dir models/\033[0m\n\n"
-                              << "   Or launch via terminal with explicit model path:\n"
-                              << "   \033[90makshar_engine.exe -m <path_to_model.gguf>\033[0m\n\n";
+                    std::cerr << "\n[Error] No valid model provided or downloaded.\n"
+                              << "You can download weights manually from:\n"
+                              << "https://huggingface.co/Singla0009/Hindi-to-Hinglish-Pro\n\n";
 
                     if (interactive_gui_mode) {
-                        std::cout << "\033[90mPress Enter to exit...\033[0m";
+                        std::cout << "Press Enter to exit...";
                         std::string dummy;
                         std::getline(std::cin, dummy);
                     }
@@ -361,14 +420,15 @@ int main(int argc, char* argv[]) {
             std::string model_fname = fs::path(active_path).filename().string();
             if (model_fname.empty()) model_fname = "hindi-to-hinglish-pro.q8_0.gguf";
 
-            std::cout << "\033[1;32m ┌─ System Status ───────────────────────────────────────────────────────────┐\n"
-                      << " │  ✔ Neural Model   : " << model_fname << "\n"
-                      << " │  ✔ Hardware Target: " << engine->get_device_name() << "\n"
-                      << " │  ✔ Initialization : Ready in " << static_cast<int>(init_ms) << " ms\n"
-                      << " └───────────────────────────────────────────────────────────────────────────┘\033[0m\n\n"
-                      << "\033[1;37m 💡 Enter any Hindi text below and press [ENTER] to translate to Hinglish.\033[0m\n"
-                      << "    Type \033[1;31mEXIT\033[0m or \033[1;31mQUIT\033[0m to terminate the engine.\n"
-                      << "\033[90m ───────────────────────────────────────────────────────────────────────────\033[0m\n";
+            std::cout << "------------------------------------------------------------------------\n"
+                      << "  SYSTEM STATUS\n"
+                      << "------------------------------------------------------------------------\n"
+                      << "  Model    : " << model_fname << "\n"
+                      << "  Backend  : " << engine->get_device_name() << "\n"
+                      << "  Ready in : " << static_cast<int>(init_ms) << " ms\n"
+                      << "------------------------------------------------------------------------\n\n"
+                      << "  Type any Hindi sentence and press ENTER (or type 'EXIT' to quit).\n"
+                      << "------------------------------------------------------------------------\n";
         } else {
             std::cerr << "[Akshar Engine] Ready in " << static_cast<int>(init_ms) 
                       << " ms! Active: " << engine->get_device_name() << "\n"
@@ -429,7 +489,7 @@ int main(int argc, char* argv[]) {
         std::string line;
         while (true) {
             if (interactive_gui_mode) {
-                std::cout << "\n\033[1;36m[ हिन्दी In ]  ❯ \033[0m" << std::flush;
+                std::cout << "\033[1;36m[Hindi]    > \033[0m" << std::flush;
             }
             if (!std::getline(std::cin, line)) break;
             byt5::TextUtils::trim(line);
@@ -443,10 +503,11 @@ int main(int argc, char* argv[]) {
 
             if (interactive_gui_mode) {
                 double cps = (ms > 0) ? (output.size() / (ms / 1000.0)) : 0;
-                std::cout << "\033[1;32m[ Hinglish Out] ❯ \033[1;37m" << output << "\033[0m\n"
-                          << "  \033[90m⚡ " << std::fixed << std::setprecision(1) << ms 
+                std::cout << "\033[1;32m[Hinglish] > \033[1;37m" << output << "\033[0m\n"
+                          << "  \033[90m[⚡ " << std::fixed << std::setprecision(1) << ms 
                           << " ms  •  " << output.size() << " chars  •  " 
-                          << static_cast<int>(cps) << " chars/sec\033[0m\n";
+                          << static_cast<int>(cps) << " chars/sec]\033[0m\n"
+                          << "------------------------------------------------------------------------\n";
             } else {
                 std::cerr << "[Akshar Engine] '" << line << "' -> '" << output 
                           << "' (" << static_cast<int>(ms) << " ms)\n";
@@ -455,15 +516,15 @@ int main(int argc, char* argv[]) {
         }
 
         if (interactive_gui_mode) {
-            std::cout << "\n\033[90mPress Enter to close this window...\033[0m";
+            std::cout << "\n[Akshar Engine] Closed. Press Enter to exit...";
             std::string dummy;
             std::getline(std::cin, dummy);
         }
 
     } catch (const std::exception& e) {
-        std::cerr << "\n\033[1;31m[Fatal Error] " << e.what() << "\033[0m\n" << std::endl;
+        std::cerr << "\n[Fatal Error] " << e.what() << "\n" << std::endl;
         if (interactive_gui_mode) {
-            std::cout << "\n\033[90mPress Enter to close this window...\033[0m";
+            std::cout << "\nPress Enter to exit...";
             std::string dummy;
             std::getline(std::cin, dummy);
         }

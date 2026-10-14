@@ -113,8 +113,10 @@ struct ByT5Engine::Impl {
 
         int num_slots = (config.n_parallel > 0) ? config.n_parallel : 4;
 
-        std::cerr << "[ByT5Engine] Loading model: " << config.model_path 
-                  << " (Requested GPU layers: " << target_ngl << ", Parallel slots: " << num_slots << ")..." << std::endl;
+        if (std::getenv("AKSHAR_VERBOSE")) {
+            std::cerr << "[ByT5Engine] Loading model: " << config.model_path 
+                      << " (Requested GPU layers: " << target_ngl << ", Parallel slots: " << num_slots << ")..." << std::endl;
+        }
 
         model = llama_model_load_from_file(config.model_path.c_str(), mparams);
 
@@ -176,13 +178,17 @@ struct ByT5Engine::Impl {
         if (target_ngl > 0) {
             gpu_active = true;
             device_name = "Vulkan GPU (Matrix Cores, " + std::to_string(num_slots) + " parallel streams)";
-            std::cerr << "[ByT5Engine] Active backend: Pure Vulkan GPU Acceleration (" 
-                      << num_slots << " parallel compute slots, FlashAttention active)." << std::endl;
+            if (std::getenv("AKSHAR_VERBOSE")) {
+                std::cerr << "[ByT5Engine] Active backend: Pure Vulkan GPU Acceleration (" 
+                          << num_slots << " parallel compute slots, FlashAttention active)." << std::endl;
+            }
         } else {
             gpu_active = false;
             device_name = "CPU SIMD (AVX2/AVX-512, " + std::to_string(num_slots) + " slots)";
-            std::cerr << "[ByT5Engine] Active backend: Multi-threaded AVX2 CPU SIMD (" 
-                      << num_slots << " slots x " << cparams.n_threads << " threads)." << std::endl;
+            if (std::getenv("AKSHAR_VERBOSE")) {
+                std::cerr << "[ByT5Engine] Active backend: Multi-threaded AVX2 CPU SIMD (" 
+                          << num_slots << " slots x " << cparams.n_threads << " threads)." << std::endl;
+            }
         }
     }
 
