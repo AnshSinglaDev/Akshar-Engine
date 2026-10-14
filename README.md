@@ -143,7 +143,25 @@ Measured on a standard desktop computer:
 
 ## 🔌 Using Akshar Engine in Your Own App (Python, Node.js, C++)
 
-If you are developing your own application, video subtitle workflow, Telegram bot, or local microservice, you can call Akshar Engine directly with sub-15ms response time:
+If you are building your own application, subtitle tool, bot, or web backend, you don't need complex C++ bindings or DLL imports. Launch `akshar_engine.exe` **once** as a background worker, stream Hindi sentences via `stdin`, and read translated Hinglish from `stdout`:
+
+```text
+[ Your App: Python / Node.js / Tauri / C# ]
+                   │
+                   │  1. Send Hindi line to stdin ("नमस्ते दुनिया\n")
+                   ▼
+          ┌───────────────────┐
+          │ akshar_engine.exe │  (Stays loaded in GPU/RAM with -q)
+          └───────────────────┘
+                   │
+                   │  2. Read Hinglish from stdout in ~12 ms ("Namaste dunia\n")
+                   ▼
+       [ Instant Translation Done ]
+```
+
+* **⚡ Zero Startup Penalty:** The AI model loads once when your app launches. Every sentence after that is translated in **10–15 milliseconds**.
+* **📦 Zero Dependencies:** Your users do NOT need Python, PyTorch, CUDA, or 15 GB of drivers installed.
+* **🌐 Any Language:** Works natively in Python, JavaScript/TypeScript, Rust, Go, C#, or shell scripts.
 
 ### 1. Python Integration (Real-Time Subprocess Pipe)
 Start `akshar_engine.exe` once in the background and stream sentences over standard IO with **zero reload overhead**:
