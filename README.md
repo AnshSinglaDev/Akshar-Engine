@@ -89,17 +89,40 @@ That's it! Type any Hindi sentence and press **Enter** to see the instant Hingli
 
 All official model weights are hosted on Hugging Face at [**`Singla0009/Hindi-to-Hinglish-Pro`**](https://huggingface.co/Singla0009/Hindi-to-Hinglish-Pro):
 
-| Model Format | Best For | File to Download | Size | Link |
+| Model Format | Best For | Files to Download | Size | Link |
 | :--- | :--- | :--- | :---: | :--- |
 | **GGUF (Q8_0)** ⭐ | **Most Users (GPU & Laptop)** | `hindi-to-hinglish-pro.q8_0.gguf` | 303 MB | [Direct Download](https://huggingface.co/Singla0009/Hindi-to-Hinglish-Pro/resolve/main/gguf/hindi-to-hinglish-pro.q8_0.gguf) |
-| **ONNX (INT8)** | Budget Cloud VPS / CPU servers | `onnx/` folder | ~380 MB | [Browse ONNX Files](https://huggingface.co/Singla0009/Hindi-to-Hinglish-Pro/tree/main/onnx) |
+| **ONNX (INT8)** | Budget Cloud VPS / CPU servers | `encoder`, `decoder`, `decoder_with_past` | ~380 MB | [Browse ONNX Files](https://huggingface.co/Singla0009/Hindi-to-Hinglish-Pro/tree/main/onnx) |
 | **CTranslate2** | Offline C++ batch jobs | `ct2/` folder | ~360 MB | [Browse CT2 Files](https://huggingface.co/Singla0009/Hindi-to-Hinglish-Pro/tree/main/ct2) |
 | **PyTorch SafeTensors**| Python developers & fine-tuning | `model.safetensors` | 1.2 GB | [Browse PyTorch Files](https://huggingface.co/Singla0009/Hindi-to-Hinglish-Pro/tree/main) |
 
-### Download via Hugging Face CLI (Optional):
+### 📥 How to Download Models (Choose Any Way)
+
+#### 1. Automatic 1-Click Download Inside the App (Easiest)
+Simply run `akshar_engine.exe` without a model present. An interactive setup menu will ask if you want to automatically download the official **GGUF** or **ONNX** model!
+You can also trigger it from the command line:
 ```bash
-# Recommended for most users:
-huggingface-cli download Singla0009/Hindi-to-Hinglish-Pro gguf/hindi-to-hinglish-pro.q8_0.gguf --local-dir models/
+# Auto-download GGUF model (~303 MB)
+akshar_engine.exe --download gguf
+
+# Auto-download ONNX model suite (~380 MB)
+akshar_engine.exe --download onnx
+```
+
+#### 2. Direct Browser Download Links
+* **GGUF Model:** [👉 Download hindi-to-hinglish-pro.q8_0.gguf](https://huggingface.co/Singla0009/Hindi-to-Hinglish-Pro/resolve/main/gguf/hindi-to-hinglish-pro.q8_0.gguf) *(place in same folder as `akshar_engine.exe`)*
+* **ONNX Suite:** Download all 3 files into an `onnx/` folder:
+  1. [encoder_model_quantized.onnx](https://huggingface.co/Singla0009/Hindi-to-Hinglish-Pro/resolve/main/onnx/encoder_model_quantized.onnx) (218 MB)
+  2. [decoder_model_quantized.onnx](https://huggingface.co/Singla0009/Hindi-to-Hinglish-Pro/resolve/main/onnx/decoder_model_quantized.onnx) (83 MB)
+  3. [decoder_with_past_model_quantized.onnx](https://huggingface.co/Singla0009/Hindi-to-Hinglish-Pro/resolve/main/onnx/decoder_with_past_model_quantized.onnx) (78 MB)
+
+#### 3. Via Terminal (Curl or Hugging Face CLI)
+```bash
+# Download GGUF with curl:
+curl.exe -L --progress-bar -o hindi-to-hinglish-pro.q8_0.gguf "https://huggingface.co/Singla0009/Hindi-to-Hinglish-Pro/resolve/main/gguf/hindi-to-hinglish-pro.q8_0.gguf"
+
+# Or download via huggingface-cli:
+huggingface-cli download Singla0009/Hindi-to-Hinglish-Pro gguf/hindi-to-hinglish-pro.q8_0.gguf --local-dir ./
 ```
 
 ---
@@ -115,6 +138,82 @@ Measured on a standard desktop computer:
 | **Technical / Business** | *आर्टिफिशियल इंटेलिजेंस और मशीन लर्निंग बहुत जरूरी हैं।* | *Artificial Intelligence aur machine learning bahut zaroori hain.* | **72 ms** |
 | **Medical / Health** | *डॉक्टर ने मरीज को तुरंत अस्पताल ले जाने की सलाह दी।* | *Doctor ne maries ko turant hospital le jane ki salah di.* | **94 ms** |
 | **Full Audio Paragraph** | *50 continuous sentences (~15 minutes of speech)* | *5,830 characters transliterated* | **6.1 seconds** (948 chars/sec) |
+
+---
+
+## 🔌 Using Akshar Engine in Your Own App (Python, Node.js, C++)
+
+If you are developing your own application, video subtitle workflow, Telegram bot, or local microservice, you can call Akshar Engine directly with sub-15ms response time:
+
+### 1. Python Integration (Real-Time Subprocess Pipe)
+Start `akshar_engine.exe` once in the background and stream sentences over standard IO with **zero reload overhead**:
+
+```python
+import subprocess
+
+# Start Akshar Engine once in background
+engine = subprocess.Popen(
+    ["akshar_engine.exe", "-m", "hindi-to-hinglish-pro.q8_0.gguf", "-q"],
+    stdin=subprocess.PIPE,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.DEVNULL,
+    text=True,
+    encoding="utf-8"
+)
+
+def translate(hindi_text: str) -> str:
+    engine.stdin.write(hindi_text.strip() + "\n")
+    engine.stdin.flush()
+    return engine.stdout.readline().strip()
+
+# Instant sub-15ms translations:
+print(translate("नमस्ते दुनिया"))
+# -> "Namaste dunia"
+
+print(translate("डॉक्टर ने मरीज को तुरंत अस्पताल ले जाने की सलाह दी।"))
+# -> "Doctor ne maries ko turant hospital le jane ki salah di."
+```
+
+### 2. Single-Sentence CLI Mode (One-Off Calls)
+Translate any Hindi text instantly and print clean Hinglish to stdout:
+```bash
+akshar_engine.exe -s "नमस्ते दुनिया" -q
+# Output: Namaste dunia
+```
+
+### 3. Node.js / Electron / Tauri Integration
+```javascript
+const { spawn } = require('child_process');
+
+const engine = spawn('akshar_engine.exe', ['-m', 'hindi-to-hinglish-pro.q8_0.gguf', '-q']);
+
+function translate(hindiText) {
+  return new Promise((resolve) => {
+    engine.stdout.once('data', (data) => resolve(data.toString().trim()));
+    engine.stdin.write(hindiText + '\n');
+  });
+}
+
+// Usage:
+translate('आज का मौसम बहुत सुहाना है').then(console.log);
+```
+
+### 4. Direct C++ Library Integration
+Include the native header directly into your C++ codebase:
+```cpp
+#include "engine.h"
+
+int main() {
+    byt5::EngineConfig cfg;
+    cfg.model_path = "hindi-to-hinglish-pro.q8_0.gguf";
+    cfg.device = byt5::DeviceMode::Vulkan; // or byt5::DeviceMode::CPU
+
+    byt5::ByT5Engine engine(cfg);
+    std::string hinglish = engine.generate("नमस्ते दुनिया");
+    std::cout << hinglish << std::endl;
+    return 0;
+}
+```
 
 ---
 

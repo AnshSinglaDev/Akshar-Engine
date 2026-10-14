@@ -131,43 +131,96 @@ static std::string resolve_onnx_dir(const std::string& user_path) {
     return "";
 }
 
+static bool download_file_with_curl_or_ps(const std::string& url, const fs::path& dest_file, size_t min_bytes) {
+    std::string cmd = "curl.exe -L --progress-bar -o \"" + dest_file.string() + "\" \"" + url + "\"";
+    int ret = std::system(cmd.c_str());
+
+    if (ret == 0 && fs::exists(dest_file) && fs::file_size(dest_file) >= min_bytes) {
+        return true;
+    }
+
+    // Fallback via PowerShell
+    std::cout << "[Notice] Retrying via PowerShell WebClient...\n";
+    std::string ps_cmd = "powershell -Command \"[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('" + url + "', '" + dest_file.string() + "')\"";
+    ret = std::system(ps_cmd.c_str());
+
+    if (ret == 0 && fs::exists(dest_file) && fs::file_size(dest_file) >= min_bytes) {
+        return true;
+    }
+
+    if (fs::exists(dest_file)) {
+        std::error_code ec;
+        fs::remove(dest_file, ec);
+    }
+    return false;
+}
+
 static bool download_gguf_model(const fs::path& target_file) {
     const std::string url = "https://huggingface.co/Singla0009/Hindi-to-Hinglish-Pro/resolve/main/gguf/hindi-to-hinglish-pro.q8_0.gguf";
 
     std::cout << "\n------------------------------------------------------------------------\n"
-              << "  DOWNLOADING OFFICIAL AI MODEL FROM HUGGING FACE\n"
+              << "  DOWNLOADING OFFICIAL GGUF MODEL FROM HUGGING FACE\n"
               << "------------------------------------------------------------------------\n"
               << "  Model  : hindi-to-hinglish-pro.q8_0.gguf (~303 MB)\n"
               << "  Source : " << url << "\n"
               << "  Save to: " << target_file.string() << "\n"
               << "------------------------------------------------------------------------\n\n";
 
-    // Attempt download using native Windows curl.exe with live progress bar
-    std::string cmd = "curl.exe -L --progress-bar -o \"" + target_file.string() + "\" \"" + url + "\"";
-    int ret = std::system(cmd.c_str());
-
-    if (ret == 0 && fs::exists(target_file) && fs::file_size(target_file) > 100 * 1024 * 1024) {
+    if (download_file_with_curl_or_ps(url, target_file, 100 * 1024 * 1024)) {
         std::cout << "\n[OK] Model successfully downloaded (" << (fs::file_size(target_file) / (1024 * 1024)) << " MB)!\n"
                   << "Saved to: " << target_file.string() << "\n\n";
         return true;
     }
 
-    // Fallback via PowerShell Invoke-WebRequest if curl.exe is missing
-    std::cout << "\n[Notice] Standard downloader failed. Retrying via PowerShell WebClient...\n";
-    std::string ps_cmd = "powershell -Command \"[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('" + url + "', '" + target_file.string() + "')\"";
-    ret = std::system(ps_cmd.c_str());
-
-    if (ret == 0 && fs::exists(target_file) && fs::file_size(target_file) > 100 * 1024 * 1024) {
-        std::cout << "\n[OK] Fallback download completed successfully (" << (fs::file_size(target_file) / (1024 * 1024)) << " MB)!\n\n";
-        return true;
-    }
-
-    std::cerr << "\n[Error] Download failed or file was incomplete. Please check your internet connection.\n";
-    if (fs::exists(target_file)) {
-        std::error_code ec;
-        fs::remove(target_file, ec);
-    }
+    std::cerr << "\n[Error] GGUF download failed. Please check internet connection.\n";
     return false;
+}
+
+static bool download_onnx_model(const fs::path& target_dir) {
+    std::error_code ec;
+    fs::create_directories(target_dir, ec);
+
+    struct OnnxFileInfo {
+        std::string filename;
+        std::string desc;
+        size_t min_bytes;
+    };
+
+    const std::vector<OnnxFileInfo> files = {
+        {"encoder_model_quantized.onnx", "Encoder INT8 (~218 MB)", 100 * 1024 * 1024},
+        {"decoder_model_quantized.onnx", "Decoder Init INT8 (~83 MB)", 40 * 1024 * 1024},
+        {"decoder_with_past_model_quantized.onnx", "Decoder KV-Cache INT8 (~78 MB)", 40 * 1024 * 1024}
+    };
+
+    std::cout << "\n------------------------------------------------------------------------\n"
+              << "  DOWNLOADING OFFICIAL ONNX MODEL SUITE FROM HUGGING FACE\n"
+              << "------------------------------------------------------------------------\n"
+              << "  Suite  : ByT5 Quantized INT8 ONNX (3 models, ~380 MB total)\n"
+              << "  Target : " << target_dir.string() << "\n"
+              << "------------------------------------------------------------------------\n\n";
+
+    const std::string base_url = "https://huggingface.co/Singla0009/Hindi-to-Hinglish-Pro/resolve/main/onnx/";
+    int step = 1;
+    for (const auto& item : files) {
+        fs::path dest = target_dir / item.filename;
+        if (fs::exists(dest) && fs::file_size(dest) >= item.min_bytes) {
+            std::cout << "  [" << step << "/3] " << item.filename << " already present, skipping.\n";
+            step++;
+            continue;
+        }
+        std::cout << "  [" << step << "/3] Downloading " << item.desc << "...\n";
+        std::string file_url = base_url + item.filename;
+        if (!download_file_with_curl_or_ps(file_url, dest, item.min_bytes)) {
+            std::cerr << "\n[Error] Failed to download " << item.filename << ".\n";
+            return false;
+        }
+        std::cout << "  ✔ " << item.filename << " saved.\n\n";
+        step++;
+    }
+
+    std::cout << "\n[OK] All ONNX model files successfully downloaded to:\n"
+              << target_dir.string() << "\n\n";
+    return true;
 }
 
 int main(int argc, char* argv[]) {
@@ -186,6 +239,29 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+    std::vector<std::string> args;
+#if defined(_WIN32)
+    int wargc = 0;
+    LPWSTR* wargv = CommandLineToArgvW(GetCommandLineW(), &wargc);
+    if (wargv) {
+        for (int i = 0; i < wargc; ++i) {
+            int size = WideCharToMultiByte(CP_UTF8, 0, wargv[i], -1, nullptr, 0, nullptr, nullptr);
+            if (size > 1) {
+                std::string s(size - 1, '\0');
+                WideCharToMultiByte(CP_UTF8, 0, wargv[i], -1, &s[0], size, nullptr, nullptr);
+                args.push_back(s);
+            } else {
+                args.push_back("");
+            }
+        }
+        LocalFree(wargv);
+    } else {
+        for (int i = 0; i < argc; ++i) args.push_back(argv[i]);
+    }
+#else
+    for (int i = 0; i < argc; ++i) args.push_back(argv[i]);
+#endif
+
     std::string user_model_path;
     std::string dev_arg = "auto";
     int n_threads = 0;
@@ -193,23 +269,32 @@ int main(int argc, char* argv[]) {
     int n_parallel = 4;
     std::string batch_input_file;
     std::string batch_output_file;
+    std::string single_input_text;
+    std::string download_target;
+    bool quiet_mode = false;
 
-    for (int i = 1; i < argc; ++i) {
-        std::string arg = argv[i];
-        if ((arg == "--model" || arg == "-m") && i + 1 < argc) {
-            user_model_path = argv[++i];
-        } else if ((arg == "--device" || arg == "-d" || arg == "--backend") && i + 1 < argc) {
-            dev_arg = argv[++i];
-        } else if ((arg == "--max-tokens" || arg == "-t") && i + 1 < argc) {
-            n_predict = std::stoi(argv[++i]);
-        } else if ((arg == "--threads" || arg == "-j") && i + 1 < argc) {
-            n_threads = std::stoi(argv[++i]);
-        } else if ((arg == "--parallel" || arg == "-p") && i + 1 < argc) {
-            n_parallel = std::stoi(argv[++i]);
-        } else if ((arg == "--batch-file" || arg == "-b") && i + 1 < argc) {
-            batch_input_file = argv[++i];
-        } else if ((arg == "--output-file" || arg == "-o") && i + 1 < argc) {
-            batch_output_file = argv[++i];
+    for (size_t i = 1; i < args.size(); ++i) {
+        std::string arg = args[i];
+        if ((arg == "--model" || arg == "-m") && i + 1 < args.size()) {
+            user_model_path = args[++i];
+        } else if ((arg == "--device" || arg == "-d" || arg == "--backend") && i + 1 < args.size()) {
+            dev_arg = args[++i];
+        } else if ((arg == "--max-tokens" || arg == "-t") && i + 1 < args.size()) {
+            n_predict = std::stoi(args[++i]);
+        } else if ((arg == "--threads" || arg == "-j") && i + 1 < args.size()) {
+            n_threads = std::stoi(args[++i]);
+        } else if ((arg == "--parallel" || arg == "-p") && i + 1 < args.size()) {
+            n_parallel = std::stoi(args[++i]);
+        } else if ((arg == "--batch-file" || arg == "-b") && i + 1 < args.size()) {
+            batch_input_file = args[++i];
+        } else if ((arg == "--output-file" || arg == "-o") && i + 1 < args.size()) {
+            batch_output_file = args[++i];
+        } else if ((arg == "--text" || arg == "-s" || arg == "--input" || arg == "-i") && i + 1 < args.size()) {
+            single_input_text = args[++i];
+        } else if (arg == "--download" && i + 1 < args.size()) {
+            download_target = args[++i];
+        } else if (arg == "--quiet" || arg == "-q") {
+            quiet_mode = true;
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "\n========================================================================\n"
                       << "  AKSHAR ENGINE (अक्षर) — HINDI TO HINGLISH NEURAL RUNTIME\n"
@@ -219,11 +304,14 @@ int main(int argc, char* argv[]) {
                       << "Options:\n"
                       << "  -d, --device <backend>   Target backend: 'auto', 'vulkan' (GPU), 'onnx' (CPU)\n"
                       << "  -m, --model <path>       Model path (.gguf file for Vulkan, directory for ONNX)\n"
+                      << "  -s, --text <string>      Single sentence input (translates to stdout and exits)\n"
+                      << "  -b, --batch-file <file>  Batch process lines from a file\n"
+                      << "  -o, --output-file <file> Output destination for batch results (default: stdout)\n"
                       << "  -j, --threads <int>      CPU compute threads (default: hardware concurrency)\n"
                       << "  -p, --parallel <int>     GPU parallel compute slots for Vulkan (default: 4)\n"
                       << "  -t, --max-tokens <int>   Maximum generation tokens (default: 256)\n"
-                      << "  -b, --batch-file <file>  Batch process lines from a file\n"
-                      << "  -o, --output-file <file> Output destination for batch results (default: stdout)\n"
+                      << "  --download <gguf|onnx>   Download official model weights from Hugging Face\n"
+                      << "  -q, --quiet              Suppress status logs (clean stdout for app piping)\n"
                       << "  -h, --help               Show this help message\n";
             return 0;
         } else if (arg[0] != '-') {
@@ -231,7 +319,28 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    bool interactive_gui_mode = (argc == 1);
+    // Direct download requested via CLI
+    if (!download_target.empty()) {
+        fs::path app_dir = get_executable_directory();
+        std::transform(download_target.begin(), download_target.end(), download_target.begin(), ::tolower);
+        if (download_target == "onnx" || download_target == "cpu") {
+            fs::path onnx_dir = app_dir / "onnx";
+            if (download_onnx_model(onnx_dir)) {
+                std::cout << "[OK] ONNX models downloaded to: " << onnx_dir.string() << "\n";
+                return 0;
+            }
+            return 1;
+        } else {
+            fs::path gguf_file = app_dir / "hindi-to-hinglish-pro.q8_0.gguf";
+            if (download_gguf_model(gguf_file)) {
+                std::cout << "[OK] GGUF model downloaded to: " << gguf_file.string() << "\n";
+                return 0;
+            }
+            return 1;
+        }
+    }
+
+    bool interactive_gui_mode = (argc == 1 && single_input_text.empty() && batch_input_file.empty());
     if (interactive_gui_mode) {
         std::cout << "\033[1;36m"
                   << "    _    _  ______ _   _    _    ____   \n"
@@ -279,9 +388,10 @@ int main(int argc, char* argv[]) {
                               << "  MODEL SETUP: Hindi-to-Hinglish Model Not Found\n"
                               << "------------------------------------------------------------------------\n"
                               << "  Target folder: " << app_dir.string() << "\n\n"
-                              << "  [1] Download official model from Hugging Face (~303 MB) [RECOMMENDED]\n"
-                              << "  [2] Drag & Drop an existing .gguf file into this window\n"
-                              << "  [3] Exit\n"
+                              << "  [1] Download GGUF model (~303 MB) — Vulkan GPU & CPU SIMD [RECOMMENDED]\n"
+                              << "  [2] Download ONNX model suite (~380 MB) — Pure CPU / DirectML\n"
+                              << "  [3] Drag & Drop an existing .gguf file or onnx folder into this window\n"
+                              << "  [4] Exit\n"
                               << "------------------------------------------------------------------------\n"
                               << "  Select option [Press ENTER for 1] > " << std::flush;
 
@@ -296,7 +406,13 @@ int main(int argc, char* argv[]) {
                             use_vulkan = true;
                         }
                     } else if (choice == "2") {
-                        std::cout << "\n  Drag & drop your .gguf file here and press ENTER > " << std::flush;
+                        fs::path dest_dir = app_dir / "onnx";
+                        if (download_onnx_model(dest_dir)) {
+                            user_model_path = dest_dir.string();
+                            use_onnx = true;
+                        }
+                    } else if (choice == "3") {
+                        std::cout << "\n  Drag & drop your .gguf file or onnx folder here and press ENTER > " << std::flush;
                         std::string input_path;
                         if (std::getline(std::cin, input_path)) {
                             byt5::TextUtils::trim(input_path);
@@ -346,7 +462,7 @@ int main(int argc, char* argv[]) {
             cfg.device = byt5::DeviceMode::CPU;
             cfg.n_gpu_layers = 0; // Pure CPU AVX2 SIMD
 
-            if (!interactive_gui_mode) {
+            if (!interactive_gui_mode && !quiet_mode && single_input_text.empty()) {
                 std::cerr << "========================================================\n"
                           << " Akshar Engine (अक्षर) [GGML CPU AVX2 Backend]\n"
                           << "========================================================\n"
@@ -369,7 +485,7 @@ int main(int argc, char* argv[]) {
             cfg.device = byt5::DeviceMode::Vulkan;
             cfg.n_gpu_layers = 99;
 
-            if (!interactive_gui_mode) {
+            if (!interactive_gui_mode && !quiet_mode && single_input_text.empty()) {
                 std::cerr << "========================================================\n"
                           << " Akshar Engine (अक्षर) [Vulkan GPU Backend]\n"
                           << "========================================================\n"
@@ -383,8 +499,10 @@ int main(int argc, char* argv[]) {
                 engine = std::make_unique<VulkanEngineAdapter>(cfg);
             } catch (const std::exception& e) {
                 if (dev_arg == "auto") {
-                    std::cerr << "[Auto Fallback] Vulkan initialization failed (" << e.what() 
-                              << "). Automatically falling back to ONNX CPU SIMD backend...\n";
+                    if (!quiet_mode) {
+                        std::cerr << "[Auto Fallback] Vulkan initialization failed (" << e.what() 
+                                  << "). Automatically falling back to ONNX CPU SIMD backend...\n";
+                    }
                     use_onnx = true;
                 } else {
                     throw;
@@ -399,7 +517,7 @@ int main(int argc, char* argv[]) {
             cfg.n_threads = n_threads;
             cfg.n_predict = n_predict;
 
-            if (!interactive_gui_mode) {
+            if (!interactive_gui_mode && !quiet_mode && single_input_text.empty()) {
                 std::cerr << "========================================================\n"
                           << " Akshar Engine (अक्षर) [ONNX Runtime CPU Backend]\n"
                           << "========================================================\n"
@@ -415,6 +533,13 @@ int main(int argc, char* argv[]) {
         auto t1 = std::chrono::high_resolution_clock::now();
         double init_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
 
+        // 1. Single sentence execution (CLI or subprocess pipe)
+        if (!single_input_text.empty()) {
+            std::string output = engine->generate(single_input_text, n_predict);
+            std::cout << output << "\n";
+            return 0;
+        }
+
         if (interactive_gui_mode) {
             std::string active_path = user_model_path.empty() ? resolve_gguf_path("") : user_model_path;
             std::string model_fname = fs::path(active_path).filename().string();
@@ -429,7 +554,7 @@ int main(int argc, char* argv[]) {
                       << "------------------------------------------------------------------------\n\n"
                       << "  Type any Hindi sentence and press ENTER (or type 'EXIT' to quit).\n"
                       << "------------------------------------------------------------------------\n";
-        } else {
+        } else if (!quiet_mode) {
             std::cerr << "[Akshar Engine] Ready in " << static_cast<int>(init_ms) 
                       << " ms! Active: " << engine->get_device_name() << "\n"
                       << "[Akshar Engine] Listening on STDIO (type 'EXIT' or 'QUIT' to terminate)...\n";
@@ -509,8 +634,10 @@ int main(int argc, char* argv[]) {
                           << static_cast<int>(cps) << " chars/sec]\033[0m\n"
                           << "------------------------------------------------------------------------\n";
             } else {
-                std::cerr << "[Akshar Engine] '" << line << "' -> '" << output 
-                          << "' (" << static_cast<int>(ms) << " ms)\n";
+                if (!quiet_mode) {
+                    std::cerr << "[Akshar Engine] '" << line << "' -> '" << output 
+                              << "' (" << static_cast<int>(ms) << " ms)\n";
+                }
                 std::cout << output << std::endl;
             }
         }
