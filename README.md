@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🏛️ Akshar Engine (अक्षर)
+# Akshar Engine ( Hindi to Hinglish )
 ### Real-Time Hindi to Hinglish AI Translator — 10ms Latency, Zero Setup, Works on Any PC
 
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-00599C?style=for-the-badge&logo=cplusplus&logoColor=white)](https://en.cppreference.com/w/cpp/17)
@@ -10,7 +10,7 @@
 [![License](https://img.shields.io/badge/License-CC_BY--NC_4.0-9370DB?style=for-the-badge)](LICENSE)
 
 <p align="center">
-  <b>Akshar Engine (अक्षर)</b> converts Hindi (Devanagari script) into natural, everyday Hinglish (Roman English script).<br>
+  <b>Akshar Engine ( Hindi to Hinglish )</b> converts Hindi (Devanagari script) into natural, everyday Hinglish (Roman English script).<br>
   It handles conversational words, slangs, and English loanwords like <i>Doctor, Hospital, Computer, Mobile</i> with 100% accurate spelling.<br>
   Runs <b>100% offline</b> on your own machine in <b>~10 to 15 milliseconds</b> per sentence — no internet or cloud API required.
 </p>
@@ -24,8 +24,8 @@
 ## ⚡ Quick Start (No Coding Required)
 
 ### Step 1: Download the Pre-Built App
-Download the Windows app bundle (**19 MB**) from the **[Releases Page](https://github.com/AnshSinglaDev/Akshar-Engine/releases/latest)**:
-👉 **[Download akshar-engine-v1.0.0-win-x64.zip](https://github.com/AnshSinglaDev/Akshar-Engine/releases/download/v1.0.0/akshar-engine-v1.0.0-win-x64.zip)**
+Download the Windows app bundle (**19 MB**) from the **[Releases Page](https://github.com/AnshSinglaDev/Akshar-hindi-hinglish/releases/latest)**:
+👉 **[Download akshar-engine-v1.0.0-win-x64.zip](https://github.com/AnshSinglaDev/Akshar-hindi-hinglish/releases/download/v1.0.0/akshar-engine-v1.0.0-win-x64.zip)**
 
 ### Step 2: Download the AI Model
 Download the official AI model file (**303 MB**) from Hugging Face:
@@ -47,7 +47,7 @@ That's it! Type any Hindi sentence and press **Enter** to see the instant Hingli
 ```text
  ╔═══════════════════════════════════════════════════════════════════════════╗
  ║                 HINDI TO HINGLISH NEURAL TRANSLATION                      ║
- ║              Akshar Engine (अक्षर) • Ultra-Fast ByT5 Runtime              ║
+ ║      Akshar Engine (Hindi to Hinglish) • Ultra-Fast ByT5 Runtime          ║
  ║                                                                           ║
  ║   ⚡ Pure Vulkan GPU & AVX2 SIMD      ⏱️  Sub-15ms Real-Time Latency     ║
  ║   📦 Model: Singla0009/Hindi-to-Hinglish-Pro • CC-BY-NC 4.0 Non-Commercial ║
@@ -76,7 +76,7 @@ That's it! Type any Hindi sentence and press **Enter** to see the instant Hingli
 
 ## 🌟 Why Akshar Engine? (In Plain Words)
 
-| Traditional Translators / Old Tools | Akshar Engine (अक्षर) |
+| Traditional Translators / Old Tools | Akshar Engine (Hindi to Hinglish) |
 | :--- | :--- |
 | **Butchers English words:** Words like "डॉक्टर" or "हॉस्पिटल" get butchered into *"daktar"* or *"aspataal"*. | **Keeps correct English:** Automatically outputs `Doctor`, `Hospital`, `Computer`, `Investment`, and `Police`. |
 | **Slow Python scripts:** Takes 300 to 500 ms per line and needs a huge 15 GB CUDA setup. | **Instant C++ speed:** Takes **10–15 milliseconds** per sentence and uses under 870 MB of memory. |
@@ -270,8 +270,8 @@ If you want to compile the C++ code yourself:
 ### Compilation Steps
 ```bash
 # Clone the repository
-git clone https://github.com/AnshSinglaDev/Akshar-Engine.git
-cd Akshar-Engine
+git clone https://github.com/AnshSinglaDev/Akshar-hindi-hinglish.git
+cd Akshar-hindi-hinglish
 
 # Configure and build
 cmake -B build -DCMAKE_BUILD_TYPE=Release
