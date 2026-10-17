@@ -208,14 +208,19 @@ struct ByT5Engine::Impl {
         if (prompt.empty()) return "";
         auto& slot = slots[slot_id];
 
+        // Apply guardrail 1: Auto-terminate missing sentence punctuation to avoid open-ended prompt hallucinations
+        std::string effective_prompt = config.gen_config.auto_terminate 
+            ? TextUtils::ensure_sentence_termination(prompt) 
+            : prompt;
+
         // Reset memory and sampler state (data=false resets KV heads without triggering heavy GPU VRAM memset barriers)
         llama_memory_clear(llama_get_memory(slot.ctx), false);
         llama_sampler_reset(slot.smpl);
 
         // Fast O(1) ByT5 Byte Tokenizer (Zero string queries, zero two-pass overhead)
         std::vector<llama_token> prompt_tokens;
-        prompt_tokens.reserve(prompt.size() + 1);
-        for (unsigned char b : prompt) {
+        prompt_tokens.reserve(effective_prompt.size() + 1);
+        for (unsigned char b : effective_prompt) {
             prompt_tokens.push_back(static_cast<llama_token>(b) + BYT5_BYTE_OFFSET);
         }
         prompt_tokens.push_back(BYT5_EOS_TOKEN); // ByT5 mandatory EOS for encoder
@@ -239,8 +244,14 @@ struct ByT5Engine::Impl {
 
         // Decoder generation loop
         std::string result;
-        result.reserve(prompt.size() * 2 + 16);
+        result.reserve(effective_prompt.size() * 2 + 16);
         int limit = (max_tokens > 0) ? static_cast<int>(max_tokens) : config.n_predict;
+
+        // Apply guardrail 2: Length ratio clamping to physically prevent runaway repetitions
+        if (config.gen_config.length_ratio > 0.0f) {
+            int ratio_limit = std::max<int>(32, static_cast<int>(effective_prompt.size() * config.gen_config.length_ratio));
+            limit = std::min(limit, ratio_limit);
+        }
 
         const llama_token eos_token_id = llama_vocab_eos(vocab);
 
@@ -266,7 +277,29 @@ struct ByT5Engine::Impl {
             n_tokens = 1;
         }
 
-        return TextUtils::sanitize_utf8(result);
+        std::string out = TextUtils::sanitize_utf8(result);
+
+        // Clean trailing punctuation if auto-terminate was enabled
+        if (config.gen_config.auto_terminate) {
+            TextUtils::clean_generated_output(out);
+        }
+
+        // Apply guardrail 3: Loop killer (suppress 3+ consecutive word repetitions)
+        if (config.gen_config.no_repeat_ngram > 0) {
+            out = TextUtils::deduplicate_words(out, config.gen_config.no_repeat_ngram - 1);
+        }
+
+        // Apply guardrail 4: Hotword exact casing/spelling overrides
+        if (!config.gen_config.hotwords.empty()) {
+            out = TextUtils::apply_hotwords(out, config.gen_config.hotwords);
+        }
+
+        // Apply formatting 5: Case style
+        if (config.gen_config.case_style != "none" && !config.gen_config.case_style.empty()) {
+            out = TextUtils::format_case(out, config.gen_config.case_style);
+        }
+
+        return out;
     }
 
     std::string generate_with_slot(const std::string& prompt, size_t max_tokens, int slot_id) {
@@ -374,6 +407,14 @@ std::string ByT5Engine::generate(const std::string& prompt, size_t max_tokens) {
 
 std::vector<std::string> ByT5Engine::generate_batch(const std::vector<std::string>& prompts, size_t max_tokens) {
     return impl_->generate_batch(prompts, max_tokens);
+}
+
+void ByT5Engine::set_generation_config(const GenerationConfig& cfg) {
+    impl_->config.gen_config = cfg;
+}
+
+const GenerationConfig& ByT5Engine::get_generation_config() const {
+    return impl_->config.gen_config;
 }
 
 bool ByT5Engine::is_gpu_active() const {

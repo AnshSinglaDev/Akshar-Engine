@@ -28,6 +28,7 @@ public:
     virtual std::string generate(const std::string& text, size_t max_tokens) = 0;
     virtual std::vector<std::string> generate_batch(const std::vector<std::string>& texts, size_t max_tokens) = 0;
     virtual std::string get_device_name() const = 0;
+    virtual void set_generation_config(const byt5::GenerationConfig& cfg) {}
 };
 
 class VulkanEngineAdapter : public IEngine {
@@ -43,17 +44,33 @@ public:
     std::string get_device_name() const override {
         return engine_.get_device_name();
     }
+    void set_generation_config(const byt5::GenerationConfig& cfg) override {
+        engine_.set_generation_config(cfg);
+    }
 };
 
 class OnnxEngineAdapter : public IEngine {
     byt5::OnnxEngine engine_;
+    byt5::GenerationConfig gen_config_;
 public:
     explicit OnnxEngineAdapter(const byt5::OnnxConfig& cfg) : engine_(cfg) {}
+    void set_generation_config(const byt5::GenerationConfig& cfg) override {
+        gen_config_ = cfg;
+    }
     std::string generate(const std::string& text, size_t max_tokens) override {
-        return engine_.generate(text, max_tokens);
+        std::string effective = gen_config_.auto_terminate ? byt5::TextUtils::ensure_sentence_termination(text) : text;
+        std::string out = engine_.generate(effective, max_tokens);
+        if (gen_config_.auto_terminate) byt5::TextUtils::clean_generated_output(out);
+        if (gen_config_.no_repeat_ngram > 0) out = byt5::TextUtils::deduplicate_words(out, gen_config_.no_repeat_ngram - 1);
+        if (!gen_config_.hotwords.empty()) out = byt5::TextUtils::apply_hotwords(out, gen_config_.hotwords);
+        if (gen_config_.case_style != "none" && !gen_config_.case_style.empty()) out = byt5::TextUtils::format_case(out, gen_config_.case_style);
+        return out;
     }
     std::vector<std::string> generate_batch(const std::vector<std::string>& texts, size_t max_tokens) override {
-        return engine_.generate_batch(texts, max_tokens);
+        std::vector<std::string> res;
+        res.reserve(texts.size());
+        for (const auto& t : texts) res.push_back(generate(t, max_tokens));
+        return res;
     }
     std::string get_device_name() const override {
         return engine_.get_device_name();
@@ -272,6 +289,7 @@ int main(int argc, char* argv[]) {
     std::string single_input_text;
     std::string download_target;
     bool quiet_mode = false;
+    byt5::GenerationConfig gen_config;
 
     for (size_t i = 1; i < args.size(); ++i) {
         std::string arg = args[i];
@@ -295,13 +313,34 @@ int main(int argc, char* argv[]) {
             download_target = args[++i];
         } else if (arg == "--quiet" || arg == "-q") {
             quiet_mode = true;
+        } else if (arg == "--auto-terminate") {
+            gen_config.auto_terminate = true;
+        } else if (arg == "--no-auto-terminate") {
+            gen_config.auto_terminate = false;
+        } else if ((arg == "--length-ratio" || arg == "-l") && i + 1 < args.size()) {
+            gen_config.length_ratio = std::stof(args[++i]);
+        } else if ((arg == "--no-repeat-ngram" || arg == "-n") && i + 1 < args.size()) {
+            gen_config.no_repeat_ngram = std::stoi(args[++i]);
+        } else if ((arg == "--hotwords" || arg == "-w") && i + 1 < args.size()) {
+            std::string hw_str = args[++i];
+            size_t start = 0;
+            while (start < hw_str.size()) {
+                size_t comma = hw_str.find(',', start);
+                std::string token = (comma == std::string::npos) ? hw_str.substr(start) : hw_str.substr(start, comma - start);
+                byt5::TextUtils::trim(token);
+                if (!token.empty()) gen_config.hotwords.push_back(token);
+                if (comma == std::string::npos) break;
+                start = comma + 1;
+            }
+        } else if ((arg == "--case" || arg == "-c") && i + 1 < args.size()) {
+            gen_config.case_style = args[++i];
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "\n========================================================================\n"
                       << "  AKSHAR ENGINE (अक्षर) — HINDI TO HINGLISH NEURAL RUNTIME\n"
                       << "  Sub-15ms Real-Time Inference • Pure Vulkan GPU & CPU SIMD\n"
                       << "========================================================================\n\n"
                       << "Usage: akshar_engine [options] [model_path]\n\n"
-                      << "Options:\n"
+                      << "Execution Options:\n"
                       << "  -d, --device <backend>   Target backend: 'auto', 'vulkan' (GPU), 'onnx' (CPU)\n"
                       << "  -m, --model <path>       Model path (.gguf file for Vulkan, directory for ONNX)\n"
                       << "  -s, --text <string>      Single sentence input (translates to stdout and exits)\n"
@@ -312,7 +351,14 @@ int main(int argc, char* argv[]) {
                       << "  -t, --max-tokens <int>   Maximum generation tokens (default: 256)\n"
                       << "  --download <gguf|onnx>   Download official model weights from Hugging Face\n"
                       << "  -q, --quiet              Suppress status logs (clean stdout for app piping)\n"
-                      << "  -h, --help               Show this help message\n";
+                      << "  -h, --help               Show this help message\n\n"
+                      << "Decoding & Guardrail Options:\n"
+                      << "  --auto-terminate         Auto-terminate with '।' to kill hallucinations (default: ON)\n"
+                      << "  --no-auto-terminate      Disable auto-termination guardrail\n"
+                      << "  -l, --length-ratio <f>   Clamp runaway output length ratio (default: 1.4)\n"
+                      << "  -n, --no-repeat-ngram <i> Suppress 3+ word repetition loops (default: 3, 0=off)\n"
+                      << "  -w, --hotwords <csv>     Prioritize brand/creator spellings (e.g. \"RenderCaption,Ansh\")\n"
+                      << "  -c, --case <style>       Output formatting: 'none', 'lower', 'title', 'sentence'\n";
             return 0;
         } else if (arg[0] != '-') {
             user_model_path = arg;
@@ -529,6 +575,13 @@ int main(int argc, char* argv[]) {
 
             engine = std::make_unique<OnnxEngineAdapter>(cfg);
         }
+
+        if (!engine) {
+            std::cerr << "[Fatal Error] Failed to initialize any engine backend.\n";
+            return 1;
+        }
+
+        engine->set_generation_config(gen_config);
 
         auto t1 = std::chrono::high_resolution_clock::now();
         double init_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();

@@ -148,6 +148,162 @@ public:
         }
         return result;
     }
+
+    // Ensures input ends with a sentence terminator ('।' / '?' / '!' / '.') to prevent unclosed prompt hallucinations
+    static inline std::string ensure_sentence_termination(const std::string& input) {
+        if (input.empty()) return "";
+        std::string s = input;
+        trim(s);
+        if (s.empty()) return "";
+
+        // Check if last character is already punctuation
+        if (s.size() >= 3 &&
+            static_cast<unsigned char>(s[s.size() - 3]) == 0xE0 &&
+            static_cast<unsigned char>(s[s.size() - 2]) == 0xA5 &&
+            (static_cast<unsigned char>(s[s.size() - 1]) == 0xA4 || static_cast<unsigned char>(s[s.size() - 1]) == 0xA5)) {
+            return s; // Already ends with '।' or '॥'
+        }
+        char last = s.back();
+        if (last == '.' || last == '?' || last == '!' || last == ';' || last == ':' || last == ',') {
+            return s;
+        }
+
+        // Append Devanagari danda '।' (0xE0 0xA5 0xA4)
+        s.push_back(static_cast<char>(0xE0));
+        s.push_back(static_cast<char>(0xA5));
+        s.push_back(static_cast<char>(0xA4));
+        return s;
+    }
+
+    // Strips trailing '।' or '.' from generated output so caller gets clean words
+    static inline void clean_generated_output(std::string& text) {
+        trim(text);
+        while (text.size() >= 3 &&
+               static_cast<unsigned char>(text[text.size() - 3]) == 0xE0 &&
+               static_cast<unsigned char>(text[text.size() - 2]) == 0xA5 &&
+               (static_cast<unsigned char>(text[text.size() - 1]) == 0xA4 || static_cast<unsigned char>(text[text.size() - 1]) == 0xA5)) {
+            text.resize(text.size() - 3);
+            trim(text);
+        }
+        while (!text.empty() && (text.back() == '.' || text.back() == ',' || text.back() == ';')) {
+            text.pop_back();
+            trim(text);
+        }
+    }
+
+    // Kills 3+ consecutive word repetition loops while preserving natural Hindi doublets (e.g. "thoda thoda")
+    static inline std::string deduplicate_words(const std::string& text, int max_consecutive = 2) {
+        if (text.empty() || max_consecutive <= 0) return text;
+        std::vector<std::string> words;
+        std::string current;
+        for (char c : text) {
+            if (c == ' ' || c == '\t' || c == '\n') {
+                if (!current.empty()) {
+                    words.push_back(current);
+                    current.clear();
+                }
+            } else {
+                current.push_back(c);
+            }
+        }
+        if (!current.empty()) words.push_back(current);
+        if (words.empty()) return "";
+
+        std::vector<std::string> filtered;
+        filtered.reserve(words.size());
+
+        std::string last_word;
+        int repeat_count = 0;
+
+        for (const auto& w : words) {
+            std::string lower_w = w;
+            for (char& ch : lower_w) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+
+            std::string lower_last = last_word;
+            for (char& ch : lower_last) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+
+            if (lower_w == lower_last && !lower_w.empty()) {
+                repeat_count++;
+                if (repeat_count <= max_consecutive) {
+                    filtered.push_back(w);
+                }
+            } else {
+                repeat_count = 1;
+                last_word = w;
+                filtered.push_back(w);
+            }
+        }
+
+        std::string out;
+        for (size_t i = 0; i < filtered.size(); ++i) {
+            if (i > 0) out.push_back(' ');
+            out += filtered[i];
+        }
+        return out;
+    }
+
+    // Replaces case-insensitive matches with exact hotword spelling/casing
+    static inline std::string apply_hotwords(const std::string& text, const std::vector<std::string>& hotwords) {
+        if (text.empty() || hotwords.empty()) return text;
+        std::string result = text;
+
+        for (const auto& hw : hotwords) {
+            if (hw.empty()) continue;
+            std::string lower_hw = hw;
+            for (char& c : lower_hw) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+            size_t pos = 0;
+            while (pos < result.size()) {
+                std::string lower_res = result.substr(pos);
+                for (char& c : lower_res) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+                size_t found = lower_res.find(lower_hw);
+                if (found == std::string::npos) break;
+
+                size_t match_idx = pos + found;
+                bool start_boundary = (match_idx == 0 || !std::isalnum(static_cast<unsigned char>(result[match_idx - 1])));
+                bool end_boundary = (match_idx + lower_hw.size() >= result.size() ||
+                                     !std::isalnum(static_cast<unsigned char>(result[match_idx + lower_hw.size()])));
+
+                if (start_boundary && end_boundary) {
+                    result.replace(match_idx, lower_hw.size(), hw);
+                    pos = match_idx + hw.size();
+                } else {
+                    pos = match_idx + 1;
+                }
+            }
+        }
+        return result;
+    }
+
+    // Formats casing (none, lower, title, sentence)
+    static inline std::string format_case(const std::string& text, const std::string& case_style) {
+        if (text.empty() || case_style == "none" || case_style.empty()) return text;
+        std::string out = text;
+
+        if (case_style == "lower") {
+            for (char& c : out) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        } else if (case_style == "title") {
+            bool new_word = true;
+            for (char& c : out) {
+                if (std::isspace(static_cast<unsigned char>(c))) {
+                    new_word = true;
+                } else if (new_word) {
+                    c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                    new_word = false;
+                }
+            }
+        } else if (case_style == "sentence") {
+            bool start = true;
+            for (char& c : out) {
+                if (!std::isspace(static_cast<unsigned char>(c)) && start) {
+                    c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                    start = false;
+                }
+            }
+        }
+        return out;
+    }
 };
 
 } // namespace byt5

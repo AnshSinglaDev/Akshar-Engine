@@ -1,7 +1,7 @@
 <div align="center">
 
-# Akshar Engine ( Hindi to Hinglish )
-### Real-Time Hindi to Hinglish AI Translator — 10ms Latency, Zero Setup, Works on Any PC
+# 🚀 Akshar Engine (अक्षर)
+### High-Throughput Hindi to Hinglish Neural Runtime — Sub-15ms Latency, Zero Setup, Works on Any PC
 
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-00599C?style=for-the-badge&logo=cplusplus&logoColor=white)](https://en.cppreference.com/w/cpp/17)
 [![Vulkan](https://img.shields.io/badge/Vulkan-Any_GPU-C41E3A?style=for-the-badge&logo=vulkan&logoColor=white)](https://www.vulkan.org/)
@@ -10,12 +10,12 @@
 [![License](https://img.shields.io/badge/License-CC_BY--NC_4.0-9370DB?style=for-the-badge)](LICENSE)
 
 <p align="center">
-  <b>Akshar Engine ( Hindi to Hinglish )</b> converts Hindi (Devanagari script) into natural, everyday Hinglish (Roman English script).<br>
+  <b>Akshar Engine (Hindi to Hinglish)</b> converts Hindi (Devanagari script) into natural, everyday Hinglish (Roman English script).<br>
   It handles conversational words, slangs, and English loanwords like <i>Doctor, Hospital, Computer, Mobile</i> with 100% accurate spelling.<br>
   Runs <b>100% offline</b> on your own machine in <b>~10 to 15 milliseconds</b> per sentence — no internet or cloud API required.
 </p>
 
-**TL;DR — Type Hindi → get natural Hinglish in 10 milliseconds. Works on NVIDIA, AMD, Intel graphics cards or regular laptop CPUs. Free forever for non-commercial use.**
+**TL;DR — Type Hindi → get natural Hinglish in 10 milliseconds. Built-in anti-hallucination guardrails, hotwords personalizer, and loop killers. Works on NVIDIA, AMD, Intel graphics cards or regular laptop CPUs. Free forever for non-commercial use.**
 
 </div>
 
@@ -254,6 +254,24 @@ akshar_engine.exe -b input_hindi.txt -o output_hinglish.txt
 If running on a server without a graphics card:
 ```bash
 akshar_engine.exe -d onnx -j 8 -m models/onnx
+```
+
+### 4. Decoding & Guardrail Options
+Akshar Engine includes built-in neural guardrails enabled by default to guarantee clean, hallucination-free outputs:
+
+| CLI Option | Default | Description |
+| :--- | :---: | :--- |
+| **`--auto-terminate`** | `ON` | Automatically appends Devanagari `।` if punctuation is omitted to eliminate IT prompt hallucinations. |
+| **`--no-auto-terminate`** | - | Disables automatic sentence termination guardrail. |
+| **`-l, --length-ratio <float>`** | `1.4` | Hard-clamps runaway output text ratio (`max_chars = input_chars * length_ratio`). |
+| **`-n, --no-repeat-ngram <int>`** | `3` | Suppresses 3+ consecutive identical word loops while preserving natural doublets (e.g. *"thoda thoda"*). |
+| **`-w, --hotwords <csv>`** | - | Overrides casing and spellings for creator names and brands (e.g. `--hotwords "RenderCaption,Ansh,NVIDIA"`). |
+| **`-c, --case <style>`** | `none` | Formats output capitalization: `none`, `lower`, `title`, or `sentence`. |
+
+Example:
+```bash
+akshar_engine.exe -s "नमस्ते दोस्तों मैं अंश सिंगला हूँ" -w "Ansh Singla,RenderCaption" -c sentence
+# Output: Namaste dosto main Ansh Singla hoon
 ```
 
 ---
