@@ -25,7 +25,7 @@
 
 ### Step 1: Download the Pre-Built App
 Download the Windows app bundle (**19 MB**) from the **[Releases Page](https://github.com/AnshSinglaDev/Akshar-hindi-hinglish/releases/latest)**:
-👉 **[Download akshar-engine-v1.0.0-win-x64.zip](https://github.com/AnshSinglaDev/Akshar-hindi-hinglish/releases/download/v1.0.0/akshar-engine-v1.0.0-win-x64.zip)**
+👉 **[Download akshar-engine-v1.1.0-win-x64.zip](https://github.com/AnshSinglaDev/Akshar-hindi-hinglish/releases/download/v1.1.0/akshar-engine-v1.1.0-win-x64.zip)**
 
 ### Step 2: Download the AI Model
 Download the official AI model file (**303 MB**) from Hugging Face:
